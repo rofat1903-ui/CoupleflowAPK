@@ -1,3 +1,4 @@
+
 name: Build Couple Money APK
 
 on:
@@ -20,51 +21,57 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.9'
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
 
-      - name: Create Android project
+      - name: Extract Android project
         shell: bash
         run: |
-          mkdir -p app/src/main/java/com/couplemoney/app
-          mkdir -p app/src/main/assets
+          set -e
 
-          cp index.html app/src/main/assets/index.html
+          mkdir -p android-project
 
-          cat > settings.gradle <<'EOF'
-          pluginManagement {
-              repositories {
-                  google()
-                  mavenCentral()
-                  gradlePluginPortal()
-              }
-          }
+          unzip -q CoupleMoneyAndroidProject.zip \
+            -d android-project
 
-          dependencyResolutionManagement {
-              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
-              repositories {
-                  google()
-                  mavenCentral()
-              }
-          }
+          echo "Isi folder:"
+          find android-project -maxdepth 3 -type f | head -50
 
-          rootProject.name = "CoupleMoney"
-          include(":app")
-          EOF
+      - name: Find Gradle project
+        shell: bash
+        run: |
+          set -e
 
-          cat > build.gradle <<'EOF'
-          plugins {
-              id 'com.android.application' version '8.7.3' apply false
-          }
-          EOF
+          PROJECT_DIR=$(find android-project \
+            -name settings.gradle \
+            -o -name settings.gradle.kts \
+            | head -1)
 
-          cat > app/build.gradle <<'EOF'
-          plugins {
-              id 'com.android.application'
-          }
+          if [ -z "$PROJECT_DIR" ]; then
+            echo "settings.gradle tidak ditemukan"
+            exit 1
+          fi
 
-          android {
-              namespace 'com.couplemoney.app'
-              compileSdk 
+          PROJECT_DIR=$(dirname "$PROJECT_DIR")
+
+          echo "PROJECT_DIR=$PROJECT_DIR" \
+            >> "$GITHUB_ENV"
+
+      - name: Build APK
+        shell: bash
+        run: |
+          set -e
+
+          cd "$PROJECT_DIR"
+
+          chmod +x gradlew
+
+          ./gradlew assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: CoupleMoney-debug-APK
+          path: |
+            **/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
